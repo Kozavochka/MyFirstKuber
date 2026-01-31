@@ -18,6 +18,9 @@ spec:
         - name: firstapp
           image: firstapp:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379/0
           ports:
             - containerPort: 8000
           readinessProbe:

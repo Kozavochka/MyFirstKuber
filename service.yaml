@@ -5,10 +5,11 @@ metadata:
   labels:
     app: firstapp
 spec:
-  type: NodePort  
+  type: NodePort
   selector:
-    app: firstapp // pod
+    app: firstapp
   ports:
     - name: http
       port: 8000
       targetPort: 8000
+      nodePort: 30080
