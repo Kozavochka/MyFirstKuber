@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: firstapp-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: firstapp.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: firstapp
+                port:
+                  number: 8000
