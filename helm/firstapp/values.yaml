@@ -1,0 +1,44 @@
+image:
+  repository: firstapp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: NodePort
+  port: 8000
+  targetPort: 8000
+  nodePort: 30080
+
+ingress:
+  enabled: true
+  className: nginx
+  host: firstapp.local
+  path: /
+
+redis:
+  enabled: true
+  image: redis:7.2
+  port: 6379
+  storage:
+    size: 1Gi
+    storageClassName: standard
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+fluentBit:
+  enabled: true
+  image: cr.fluentbit.io/fluent/fluent-bit:2.2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 50Mi
+    limits:
+      cpu: 100m
+      memory: 200Mi

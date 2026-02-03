@@ -1,5 +1,6 @@
 apiVersion: apps/v1
-kind: Deployment // firstapp-deployment
+kind: Deployment
+# firstapp-deployment
 metadata:
   name: firstapp
   labels:

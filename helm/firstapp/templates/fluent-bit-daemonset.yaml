@@ -1,0 +1,49 @@
+{{- if .Values.fluentBit.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-bit
+  labels:
+    app: fluent-bit
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  labels:
+    app: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit
+  template:
+    metadata:
+      labels:
+        app: fluent-bit
+    spec:
+      serviceAccountName: fluent-bit
+      containers:
+        - name: fluent-bit
+          image: {{ .Values.fluentBit.image }}
+          resources:
+            limits:
+              memory: {{ .Values.fluentBit.resources.limits.memory }}
+              cpu: {{ .Values.fluentBit.resources.limits.cpu }}
+            requests:
+              memory: {{ .Values.fluentBit.resources.requests.memory }}
+              cpu: {{ .Values.fluentBit.resources.requests.cpu }}
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: containers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: containers
+          hostPath:
+            path: /var/lib/docker/containers
+{{- end }}
