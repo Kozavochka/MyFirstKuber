@@ -3,6 +3,11 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+global:
+  imageRegistry: public.ecr.aws
+  security:
+    allowInsecureImages: true
+
 replicaCount: 2
 
 service:
@@ -42,3 +47,40 @@ fluentBit:
     limits:
       cpu: 100m
       memory: 200Mi
+
+elasticsearch:
+  enabled: true
+  master:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "1Gi"
+      limits:
+        cpu: "500m"
+        memory: "2Gi"
+  data:
+    replicaCount: 0
+  coordinating:
+    replicaCount: 0
+  ingest:
+    replicaCount: 0
+  persistence:
+    enabled: true
+    size: 500Mi
+    storageClass: standard
+  volumePermissions:
+    enabled: false
+  sysctlImage:
+    enabled: false
+
+kibana:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "512Mi"
+    limits:
+      cpu: "250m"
+      memory: "1Gi"
