@@ -1,12 +1,16 @@
 image:
   repository: firstapp
-  tag: latest
+  tag: v3
   pullPolicy: IfNotPresent
 
 global:
   imageRegistry: public.ecr.aws
   security:
     allowInsecureImages: true
+
+env:
+  redisUrl: redis://redis:6379/0
+  elasticUrl: http://firstapp-elasticsearch:9200
 
 replicaCount: 2
 
@@ -52,22 +56,31 @@ elasticsearch:
   enabled: true
   master:
     replicaCount: 1
+    heapSize: 1g
     resources:
       requests:
-        cpu: "250m"
-        memory: "1Gi"
-      limits:
         cpu: "500m"
         memory: "2Gi"
+      limits:
+        cpu: "1"
+        memory: "3Gi"
   data:
-    replicaCount: 0
+    replicaCount: 1
+    heapSize: 1g
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "1"
+        memory: "3Gi"
   coordinating:
     replicaCount: 0
   ingest:
     replicaCount: 0
   persistence:
     enabled: true
-    size: 500Mi
+    size: 5Gi
     storageClass: standard
   volumePermissions:
     enabled: false

@@ -1,2 +1,3 @@
 /helm/firstapp/Chart.lock
 /helm/firstapp/charts
+.env

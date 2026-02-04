@@ -20,7 +20,9 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: REDIS_URL
-              value: redis://redis:{{ .Values.redis.port }}/0
+              value: {{ .Values.env.redisUrl | quote }}
+            - name: ELASTIC_URL
+              value: {{ .Values.env.elasticUrl | quote }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
           readinessProbe:
