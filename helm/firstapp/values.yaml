@@ -1,6 +1,6 @@
 image:
   repository: firstapp
-  tag: v3
+  tag: v7
   pullPolicy: IfNotPresent
 
 global:
@@ -44,6 +44,12 @@ redis:
 fluentBit:
   enabled: true
   image: cr.fluentbit.io/fluent/fluent-bit:2.2
+  input:
+    path: /var/log/containers/*.log
+    memBufLimit: 50MB
+  config:
+    flush: 1
+    logLevel: info
   resources:
     requests:
       cpu: 50m
@@ -51,6 +57,46 @@ fluentBit:
     limits:
       cpu: 100m
       memory: 200Mi
+
+logstash:
+  enabled: true
+  image: docker.elastic.co/logstash/logstash:8.14.3
+  replicaCount: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  javaOpts: "-Xms512m -Xmx512m"
+  service:
+    fluentBitPort: 5044
+    beatsPort: 5045
+    monitoringPort: 9600
+  elasticsearch:
+    hosts: http://firstapp-elasticsearch:9200
+  pipeline:
+    logsIndex: k8s-logs-%{+YYYY.MM.dd}
+    metricsIndex: metricbeat-%{+YYYY.MM.dd}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+metricbeat:
+  enabled: true
+  image: docker.elastic.co/beats/metricbeat:8.14.3
+  period: 30s
+  hostNetwork: true
+  resources:
+    requests:
+      cpu: 75m
+      memory: 150Mi
+    limits:
+      cpu: 200m
+      memory: 300Mi
 
 elasticsearch:
   enabled: true
@@ -90,6 +136,14 @@ elasticsearch:
 kibana:
   enabled: true
   replicaCount: 1
+  image:
+    tag: 9.1.2-debian-12-r0
+  elasticsearch:
+    hosts:
+      - firstapp-elasticsearch
+    port: 9200
+  service:
+    type: ClusterIP
   resources:
     requests:
       cpu: "100m"

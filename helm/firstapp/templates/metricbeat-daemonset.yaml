@@ -1,0 +1,137 @@
+{{- if .Values.metricbeat.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "firstapp.fullname" . }}-metricbeat
+  labels:
+    app: metricbeat
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "firstapp.fullname" . }}-metricbeat
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/stats
+      - nodes/proxy
+      - nodes/metrics
+      - namespaces
+      - events
+      - pods
+      - services
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - replicasets
+      - statefulsets
+      - deployments
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "firstapp.fullname" . }}-metricbeat
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "firstapp.fullname" . }}-metricbeat
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "firstapp.fullname" . }}-metricbeat
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "firstapp.fullname" . }}-metricbeat-config
+  labels:
+    app: metricbeat
+data:
+  metricbeat.yml: |
+{{ tpl (.Files.Get "files/metricbeat/metricbeat.yml") . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "firstapp.fullname" . }}-metricbeat
+  labels:
+    app: metricbeat
+spec:
+  selector:
+    matchLabels:
+      app: metricbeat
+  template:
+    metadata:
+      labels:
+        app: metricbeat
+    spec:
+      serviceAccountName: {{ include "firstapp.fullname" . }}-metricbeat
+      hostNetwork: {{ .Values.metricbeat.hostNetwork }}
+      {{ if .Values.metricbeat.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{ end }}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: metricbeat
+          image: {{ .Values.metricbeat.image }}
+          args:
+            - -e
+            - -c
+            - /usr/share/metricbeat/metricbeat.yml
+            - -system.hostfs=/hostfs
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          securityContext:
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: {{ .Values.metricbeat.resources.requests.cpu }}
+              memory: {{ .Values.metricbeat.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.metricbeat.resources.limits.cpu }}
+              memory: {{ .Values.metricbeat.resources.limits.memory }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/metricbeat/metricbeat.yml
+              subPath: metricbeat.yml
+              readOnly: true
+            - name: proc
+              mountPath: /hostfs/proc
+              readOnly: true
+            - name: cgroup
+              mountPath: /hostfs/sys/fs/cgroup
+              readOnly: true
+            - name: root
+              mountPath: /hostfs
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            defaultMode: 0600
+            name: {{ include "firstapp.fullname" . }}-metricbeat-config
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: root
+          hostPath:
+            path: /
+            type: Directory
+{{- end }}

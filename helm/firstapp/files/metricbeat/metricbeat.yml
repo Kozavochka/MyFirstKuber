@@ -1,0 +1,44 @@
+name: ${NODE_NAME}
+
+metricbeat.modules:
+  - module: system
+    period: {{ .Values.metricbeat.period }}
+    metricsets:
+      - cpu
+      - load
+      - memory
+      - network
+      - process
+      - process_summary
+      - filesystem
+      - fsstat
+      - uptime
+    processes: ['.*']
+    process.include_top_n:
+      by_cpu: 5
+      by_memory: 5
+
+  - module: kubernetes
+    metricsets:
+      - node
+      - system
+      - pod
+      - container
+      - volume
+    period: {{ .Values.metricbeat.period }}
+    host: ${NODE_NAME}
+    hosts: ["https://${HOST_IP}:10250"]
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    ssl.verification_mode: "none"
+
+processors:
+  - add_host_metadata: ~
+  - add_cloud_metadata: ~
+  - add_kubernetes_metadata:
+      host: ${NODE_NAME}
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+
+output.logstash:
+  hosts: ["{{ include "firstapp.fullname" . }}-logstash:{{ .Values.logstash.service.beatsPort }}"]

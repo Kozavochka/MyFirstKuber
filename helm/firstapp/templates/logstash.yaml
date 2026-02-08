@@ -1,0 +1,112 @@
+{{- if .Values.logstash.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "firstapp.fullname" . }}-logstash-pipeline
+  labels:
+    app: logstash
+data:
+  logstash.conf: |
+{{ tpl (.Files.Get "files/logstash/pipeline/logstash.conf") . | nindent 4 }}
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    xpack.monitoring.enabled: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "firstapp.fullname" . }}-logstash
+  labels:
+    app: logstash
+spec:
+  type: ClusterIP
+  selector:
+    app: logstash
+  ports:
+    - name: fluentbit
+      port: {{ .Values.logstash.service.fluentBitPort }}
+      targetPort: fluentbit
+    - name: beats
+      port: {{ .Values.logstash.service.beatsPort }}
+      targetPort: beats
+    - name: monitoring
+      port: {{ .Values.logstash.service.monitoringPort }}
+      targetPort: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "firstapp.fullname" . }}-logstash
+  labels:
+    app: logstash
+spec:
+  replicas: {{ .Values.logstash.replicaCount }}
+  strategy:
+    type: {{ .Values.logstash.updateStrategy.type }}
+    {{- if eq .Values.logstash.updateStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.logstash.updateStrategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.logstash.updateStrategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        checksum/logstash-pipeline: {{ printf "%s\n%s" (tpl (.Files.Get "files/logstash/pipeline/logstash.conf") .) "http.host: \"0.0.0.0\"\nxpack.monitoring.enabled: false\n" | sha256sum }}
+    spec:
+      containers:
+        - name: logstash
+          image: {{ .Values.logstash.image }}
+          env:
+            - name: LS_JAVA_OPTS
+              value: {{ .Values.logstash.javaOpts | quote }}
+            - name: ELASTICSEARCH_HOSTS
+              value: {{ .Values.logstash.elasticsearch.hosts | quote }}
+          ports:
+            - name: fluentbit
+              containerPort: {{ .Values.logstash.service.fluentBitPort }}
+            - name: beats
+              containerPort: {{ .Values.logstash.service.beatsPort }}
+            - name: monitoring
+              containerPort: {{ .Values.logstash.service.monitoringPort }}
+          resources:
+            requests:
+              cpu: {{ .Values.logstash.resources.requests.cpu }}
+              memory: {{ .Values.logstash.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.logstash.resources.limits.cpu }}
+              memory: {{ .Values.logstash.resources.limits.memory }}
+          startupProbe:
+            tcpSocket:
+              port: beats
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: beats
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: beats
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - name: pipeline
+              mountPath: /usr/share/logstash/pipeline/logstash.conf
+              subPath: logstash.conf
+            - name: pipeline
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+      volumes:
+        - name: pipeline
+          configMap:
+            name: {{ include "firstapp.fullname" . }}-logstash-pipeline
+{{- end }}

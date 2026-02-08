@@ -2,14 +2,105 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: fluent-bit
+  name: {{ include "firstapp.fullname" . }}-fluent-bit
   labels:
     app: fluent-bit
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "firstapp.fullname" . }}-fluent-bit
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "firstapp.fullname" . }}-fluent-bit
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "firstapp.fullname" . }}-fluent-bit
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "firstapp.fullname" . }}-fluent-bit
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "firstapp.fullname" . }}-fluent-bit-config
+  labels:
+    app: fluent-bit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        {{ .Values.fluentBit.config.flush }}
+        Daemon       Off
+        Log_Level    {{ .Values.fluentBit.config.logLevel }}
+        Parsers_File parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              {{ .Values.fluentBit.input.path }}
+        Tag               kube.*
+        multiline.parser  docker,cri
+        DB                /tail-db/tail-containers-state.db
+        Mem_Buf_Limit     {{ .Values.fluentBit.input.memBufLimit }}
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+
+{{ if .Values.logstash.enabled }}
+    [OUTPUT]
+        Name              tcp
+        Match             kube.*
+        Host              {{ include "firstapp.fullname" . }}-logstash
+        Port              {{ .Values.logstash.service.fluentBitPort }}
+        Format            json_lines
+        json_date_key     @timestamp
+        json_date_format  iso8601
+{{ else }}
+    [OUTPUT]
+        Name            es
+        Match           kube.*
+        Host            firstapp-elasticsearch
+        Port            9200
+        Logstash_Format On
+        Logstash_Prefix fluent-bit
+        Replace_Dots    On
+{{ end }}
+
+  parsers.conf: |
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+    [PARSER]
+        Name         cri
+        Format       regex
+        Regex        ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
+        Time_Key     time
+        Time_Format  %Y-%m-%dT%H:%M:%S.%L%z
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: fluent-bit
+  name: {{ include "firstapp.fullname" . }}-fluent-bit
   labels:
     app: fluent-bit
 spec:
@@ -21,10 +112,16 @@ spec:
       labels:
         app: fluent-bit
     spec:
-      serviceAccountName: fluent-bit
+      serviceAccountName: {{ include "firstapp.fullname" . }}-fluent-bit
+      terminationGracePeriodSeconds: 10
       containers:
         - name: fluent-bit
           image: {{ .Values.fluentBit.image }}
+          args:
+            - -c
+            - /fluent-bit/etc/fluent-bit.conf
+          securityContext:
+            runAsUser: 0
           resources:
             limits:
               memory: {{ .Values.fluentBit.resources.limits.memory }}
@@ -33,17 +130,34 @@ spec:
               memory: {{ .Values.fluentBit.resources.requests.memory }}
               cpu: {{ .Values.fluentBit.resources.requests.cpu }}
           volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc/fluent-bit.conf
+              subPath: fluent-bit.conf
+            - name: config
+              mountPath: /fluent-bit/etc/parsers.conf
+              subPath: parsers.conf
             - name: varlog
               mountPath: /var/log
               readOnly: true
             - name: containers
               mountPath: /var/lib/docker/containers
               readOnly: true
+            - name: taildb
+              mountPath: /tail-db
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "firstapp.fullname" . }}-fluent-bit-config
         - name: varlog
           hostPath:
             path: /var/log
+            type: Directory
         - name: containers
           hostPath:
             path: /var/lib/docker/containers
+            type: DirectoryOrCreate
+        - name: taildb
+          hostPath:
+            path: /var/lib/{{ include "firstapp.fullname" . }}/fluent-bit
+            type: DirectoryOrCreate
 {{- end }}
